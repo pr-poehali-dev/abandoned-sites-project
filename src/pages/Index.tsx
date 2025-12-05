@@ -4,6 +4,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import Icon from '@/components/ui/icon';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 
 type DifficultyLevel = 'easy' | 'medium' | 'hard' | 'extreme';
 type LocationType = 'industrial' | 'hospital' | 'amusement' | 'residential' | 'military';
@@ -18,6 +23,8 @@ interface Location {
   danger: number;
   type: LocationType;
   year: string;
+  rating: number;
+  ratingsCount: number;
   stories: Story[];
 }
 
@@ -28,7 +35,7 @@ interface Story {
   text: string;
 }
 
-const locations: Location[] = [
+const initialLocations: Location[] = [
   {
     id: 1,
     title: 'Завод "Красный Октябрь"',
@@ -39,6 +46,8 @@ const locations: Location[] = [
     danger: 6,
     type: 'industrial',
     year: '1993',
+    rating: 4.5,
+    ratingsCount: 127,
     stories: [
       {
         id: 1,
@@ -64,6 +73,8 @@ const locations: Location[] = [
     danger: 8,
     type: 'hospital',
     year: '2001',
+    rating: 4.8,
+    ratingsCount: 89,
     stories: [
       {
         id: 3,
@@ -83,6 +94,8 @@ const locations: Location[] = [
     danger: 4,
     type: 'amusement',
     year: '2008',
+    rating: 4.2,
+    ratingsCount: 156,
     stories: [
       {
         id: 4,
@@ -110,9 +123,15 @@ const typeConfig = {
 };
 
 export default function Index() {
+  const { toast } = useToast();
+  const [locations, setLocations] = useState<Location[]>(initialLocations);
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel | 'all'>('all');
   const [selectedType, setSelectedType] = useState<LocationType | 'all'>('all');
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null);
+  const [storyFormOpen, setStoryFormOpen] = useState(false);
+  const [currentLocationId, setCurrentLocationId] = useState<number | null>(null);
+  const [newStory, setNewStory] = useState({ author: '', text: '' });
+  const [userRatings, setUserRatings] = useState<Record<number, number>>({});
 
   const filteredLocations = locations.filter(loc => {
     if (selectedDifficulty !== 'all' && loc.difficulty !== selectedDifficulty) return false;
@@ -125,6 +144,100 @@ export default function Index() {
     if (danger <= 6) return 'text-yellow-500';
     if (danger <= 8) return 'text-orange-500';
     return 'text-blood-red';
+  };
+
+  const handleAddStory = () => {
+    if (!newStory.author.trim() || !newStory.text.trim() || !currentLocationId) {
+      toast({
+        title: 'Ошибка',
+        description: 'Заполните все поля',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setLocations(prev => prev.map(loc => {
+      if (loc.id === currentLocationId) {
+        return {
+          ...loc,
+          stories: [...loc.stories, {
+            id: Date.now(),
+            author: newStory.author,
+            date: 'только что',
+            text: newStory.text
+          }]
+        };
+      }
+      return loc;
+    }));
+
+    setNewStory({ author: '', text: '' });
+    setStoryFormOpen(false);
+    toast({
+      title: 'История добавлена!',
+      description: 'Спасибо за ваш вклад в каталог локаций',
+    });
+  };
+
+  const handleRateLocation = (locationId: number, rating: number) => {
+    setUserRatings(prev => ({ ...prev, [locationId]: rating }));
+    
+    setLocations(prev => prev.map(loc => {
+      if (loc.id === locationId) {
+        const newRatingsCount = loc.ratingsCount + 1;
+        const newRating = ((loc.rating * loc.ratingsCount) + rating) / newRatingsCount;
+        return {
+          ...loc,
+          rating: Math.round(newRating * 10) / 10,
+          ratingsCount: newRatingsCount
+        };
+      }
+      return loc;
+    }));
+
+    toast({
+      title: 'Оценка учтена!',
+      description: `Вы оценили локацию на ${rating} ${rating === 1 ? 'звезду' : rating < 5 ? 'звезды' : 'звёзд'}`,
+    });
+  };
+
+  const renderStars = (rating: number, locationId: number, interactive = false) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+
+    for (let i = 1; i <= 5; i++) {
+      if (interactive) {
+        const userRating = userRatings[locationId];
+        stars.push(
+          <button
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!userRating) handleRateLocation(locationId, i);
+            }}
+            disabled={!!userRating}
+            className={`transition-colors ${userRating ? 'cursor-not-allowed' : 'cursor-pointer hover:text-primary'}`}
+          >
+            <Icon
+              name={i <= fullStars ? 'Star' : (i === fullStars + 1 && hasHalfStar ? 'StarHalf' : 'Star')}
+              size={18}
+              className={i <= fullStars ? 'text-primary fill-primary' : (i === fullStars + 1 && hasHalfStar ? 'text-primary fill-primary' : 'text-muted-foreground')}
+            />
+          </button>
+        );
+      } else {
+        stars.push(
+          <Icon
+            key={i}
+            name={i <= fullStars ? 'Star' : (i === fullStars + 1 && hasHalfStar ? 'StarHalf' : 'Star')}
+            size={18}
+            className={i <= fullStars ? 'text-primary fill-primary' : (i === fullStars + 1 && hasHalfStar ? 'text-primary fill-primary' : 'text-muted-foreground')}
+          />
+        );
+      }
+    }
+    return stars;
   };
 
   return (
@@ -262,6 +375,34 @@ export default function Index() {
                     </div>
                   </div>
 
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1">
+                      {renderStars(location.rating, location.id, false)}
+                      <span className="text-sm text-muted-foreground ml-1">
+                        {location.rating} ({location.ratingsCount})
+                      </span>
+                    </div>
+                    {!userRatings[location.id] && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Оценить
+                      </button>
+                    )}
+                  </div>
+
+                  {!userRatings[location.id] && expandedLocation === location.id && (
+                    <div className="mb-4 p-3 bg-secondary/30 rounded-lg border border-border">
+                      <p className="text-xs text-muted-foreground mb-2">Ваша оценка:</p>
+                      <div className="flex gap-1">
+                        {renderStars(location.rating, location.id, true)}
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
                     {location.description}
                   </p>
@@ -292,6 +433,64 @@ export default function Index() {
                               <p className="text-sm text-foreground">{story.text}</p>
                             </div>
                           ))}
+                          
+                          <Dialog open={storyFormOpen && currentLocationId === location.id} onOpenChange={(open) => {
+                            setStoryFormOpen(open);
+                            if (open) setCurrentLocationId(location.id);
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full glow-red-hover"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentLocationId(location.id);
+                                  setStoryFormOpen(true);
+                                }}
+                              >
+                                <Icon name="Plus" size={16} className="mr-2" />
+                                Добавить свою историю
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="bg-card border-border" onClick={(e) => e.stopPropagation()}>
+                              <DialogHeader>
+                                <DialogTitle className="font-oswald text-primary">Поделитесь своей историей</DialogTitle>
+                                <DialogDescription className="text-muted-foreground">
+                                  Расскажите о своём посещении локации "{location.title}"
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div>
+                                  <Label htmlFor="author" className="text-foreground">Ваш никнейм</Label>
+                                  <Input
+                                    id="author"
+                                    placeholder="Сталкер_777"
+                                    value={newStory.author}
+                                    onChange={(e) => setNewStory(prev => ({ ...prev, author: e.target.value }))}
+                                    className="mt-1"
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="text" className="text-foreground">Ваша история</Label>
+                                  <Textarea
+                                    id="text"
+                                    placeholder="Расскажите, что вы видели, какие ощущения испытали, с чем столкнулись..."
+                                    value={newStory.text}
+                                    onChange={(e) => setNewStory(prev => ({ ...prev, text: e.target.value }))}
+                                    className="mt-1 min-h-[120px]"
+                                  />
+                                </div>
+                                <Button
+                                  onClick={handleAddStory}
+                                  className="w-full glow-red-hover"
+                                >
+                                  <Icon name="Send" size={16} className="mr-2" />
+                                  Опубликовать историю
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         </TabsContent>
                       </Tabs>
 
