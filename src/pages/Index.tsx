@@ -26,6 +26,7 @@ interface Location {
   rating: number;
   ratingsCount: number;
   stories: Story[];
+  videos?: string[];
 }
 
 interface Story {
@@ -33,6 +34,8 @@ interface Story {
   author: string;
   date: string;
   text: string;
+  images?: string[];
+  video?: string;
 }
 
 const initialLocations: Location[] = [
@@ -130,7 +133,7 @@ export default function Index() {
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null);
   const [storyFormOpen, setStoryFormOpen] = useState(false);
   const [currentLocationId, setCurrentLocationId] = useState<number | null>(null);
-  const [newStory, setNewStory] = useState({ author: '', text: '' });
+  const [newStory, setNewStory] = useState({ author: '', text: '', images: [] as string[], video: '' });
   const [userRatings, setUserRatings] = useState<Record<number, number>>({});
 
   const filteredLocations = locations.filter(loc => {
@@ -144,6 +147,41 @@ export default function Index() {
     if (danger <= 6) return 'text-yellow-500';
     if (danger <= 8) return 'text-orange-500';
     return 'text-blood-red';
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const imageUrls: string[] = [];
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        imageUrls.push(reader.result as string);
+        if (imageUrls.length === files.length) {
+          setNewStory(prev => ({ ...prev, images: [...prev.images, ...imageUrls] }));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewStory(prev => ({ ...prev, video: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = (index: number) => {
+    setNewStory(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
   };
 
   const handleAddStory = () => {
@@ -164,14 +202,16 @@ export default function Index() {
             id: Date.now(),
             author: newStory.author,
             date: 'только что',
-            text: newStory.text
+            text: newStory.text,
+            images: newStory.images.length > 0 ? newStory.images : undefined,
+            video: newStory.video || undefined
           }]
         };
       }
       return loc;
     }));
 
-    setNewStory({ author: '', text: '' });
+    setNewStory({ author: '', text: '', images: [], video: '' });
     setStoryFormOpen(false);
     toast({
       title: 'История добавлена!',
@@ -430,7 +470,31 @@ export default function Index() {
                                 <span className="text-sm font-semibold text-primary">{story.author}</span>
                                 <span className="text-xs text-muted-foreground">{story.date}</span>
                               </div>
-                              <p className="text-sm text-foreground">{story.text}</p>
+                              <p className="text-sm text-foreground mb-3">{story.text}</p>
+                              
+                              {story.images && story.images.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 mt-3">
+                                  {story.images.map((img, idx) => (
+                                    <img
+                                      key={idx}
+                                      src={img}
+                                      alt={`Фото ${idx + 1}`}
+                                      className="w-full h-32 object-cover rounded-lg border border-border hover:scale-105 transition-transform cursor-pointer"
+                                      onClick={() => window.open(img, '_blank')}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              
+                              {story.video && (
+                                <div className="mt-3">
+                                  <video
+                                    src={story.video}
+                                    controls
+                                    className="w-full rounded-lg border border-border"
+                                  />
+                                </div>
+                              )}
                             </div>
                           ))}
                           
@@ -460,7 +524,7 @@ export default function Index() {
                                   Расскажите о своём посещении локации "{location.title}"
                                 </DialogDescription>
                               </DialogHeader>
-                              <div className="space-y-4">
+                              <div className="space-y-4 max-h-[70vh] overflow-y-auto">
                                 <div>
                                   <Label htmlFor="author" className="text-foreground">Ваш никнейм</Label>
                                   <Input
@@ -481,6 +545,70 @@ export default function Index() {
                                     className="mt-1 min-h-[120px]"
                                   />
                                 </div>
+                                
+                                <div>
+                                  <Label htmlFor="images" className="text-foreground flex items-center gap-2">
+                                    <Icon name="Image" size={16} />
+                                    Добавить фотографии (до 4 штук)
+                                  </Label>
+                                  <Input
+                                    id="images"
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleImageUpload}
+                                    className="mt-1"
+                                  />
+                                  {newStory.images.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-2 mt-3">
+                                      {newStory.images.map((img, idx) => (
+                                        <div key={idx} className="relative group">
+                                          <img
+                                            src={img}
+                                            alt={`Preview ${idx + 1}`}
+                                            className="w-full h-24 object-cover rounded-lg border border-border"
+                                          />
+                                          <button
+                                            onClick={() => removeImage(idx)}
+                                            className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          >
+                                            <Icon name="X" size={14} />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <div>
+                                  <Label htmlFor="video" className="text-foreground flex items-center gap-2">
+                                    <Icon name="Video" size={16} />
+                                    Добавить видео (один файл)
+                                  </Label>
+                                  <Input
+                                    id="video"
+                                    type="file"
+                                    accept="video/*"
+                                    onChange={handleVideoUpload}
+                                    className="mt-1"
+                                  />
+                                  {newStory.video && (
+                                    <div className="relative mt-3 group">
+                                      <video
+                                        src={newStory.video}
+                                        className="w-full rounded-lg border border-border"
+                                        controls
+                                      />
+                                      <button
+                                        onClick={() => setNewStory(prev => ({ ...prev, video: '' }))}
+                                        className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <Icon name="X" size={16} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                
                                 <Button
                                   onClick={handleAddStory}
                                   className="w-full glow-red-hover"
